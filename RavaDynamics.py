@@ -20,17 +20,22 @@ import datetime
 import webbrowser
 import json
 
+import platform
+
+
+shared_excluded_list = []
+
+
 
 API_UPDATE_URL = "https://autofyn.com/storage/app/public/App_CMS_images/get_latest_versioon.txt"  # Replace with your API URL
 
-
+is_register = False
 
 current_version = None
 latest_version = None
 def check_for_updates():
     global current_version
     global latest_version
-    # current_version_path = os.path.join(os.path.dirname(sys.executable), 'version.txt')
     current_version_path = "version.txt"
     
     if not os.path.exists(current_version_path):
@@ -39,7 +44,7 @@ def check_for_updates():
     with open(current_version_path, 'r') as file:
         version_data = json.load(file)
         current_version = version_data.get("version")
-    # print(current_version)
+    
     
     
 
@@ -48,10 +53,6 @@ def check_for_updates():
         
         latest_version_info = latest_version.json()
         latest_version_no = latest_version_info.get("version")
-    
-        
-        # print(latest_version_no)
-        # print(f"Latest version: {latest_version}, Current version: {current_version}")
         if latest_version_no > current_version:
             return latest_version_info
     return None
@@ -65,25 +66,6 @@ def check_for_updates():
 
 
 
-def get_desktop_path():
-    # Get the user's home directory
-    home = os.path.expanduser("~")
-    # Append 'Desktop' to the home directory path
-    desktop_path = os.path.join(home, 'Desktop')
-    
-    return desktop_path
-
-# def load_excluded_domains():
-#     url = "https://autofyn.com/exclude.txt"
-#     excluded_domains = []
-#     try:
-#         response = requests.get(url)
-#         response.raise_for_status()  # Ensure we notice bad responses
-#         excluded_domains = [line.strip() for line in response.text.splitlines() if line.strip()]
-#         print(f"Loaded excluded domains: {excluded_domains}")
-#     except requests.RequestException as e:
-#         print(f"Error fetching excluded domains: {e}")
-#     return excluded_domains
 
 
 def load_excluded_domains():
@@ -343,26 +325,16 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(scaled_icon))
         if (app_data.get('text_4')):
             QTimer.singleShot(16000, lambda: self.show_notification(app_data.get('text_4')))
-            QTimer.singleShot(18000, lambda: self.show_notification("The default output path is set to the Desktop. You can change it if you want."))
-            # QMessageBox.warning(None, "Info", "The default output path is set to the Desktop. You can change it if you want.")
             
         # Changed made
         self.output_folder=''
-        # output_folder_path = os.path.join(os.getcwd(), "outputs")
-        output_folder_path = os.path.join(get_desktop_path(), "outputs")
-        # Check if the output folder exists
-        if not os.path.exists(output_folder_path):
-            # If the folder doesn't exist, create it
-            os.makedirs(output_folder_path)
-        self.output_folder = output_folder_path
         self.user_data=''
         self.app_data=app_data
-        self.excluded_domains = self.load_excluded_domains()
-        # print(self.excluded_domains)
+        self.excluded_domains = load_excluded_domains()
         self.add_excluded_domains = 0
         
         
-        # print(f"Domains = {self.excluded_domains}")
+
         self.worker_thread = None
         self.total_keywords = 0
         self.result_count = 0
@@ -447,8 +419,6 @@ class MainWindow(QMainWindow):
         add_domain_container.addWidget(self.new_domain)
         add_domain_container.addWidget(add_domain_button)
         form_group.addRow(add_domain_container)
-        # self.populate_excluded_domains_box()  # changes made
-        # input_container = QHBoxLayout()
         output_filename_label = QLabel("Output Filename:")
         self.output_filename = QLineEdit()
         self.output_filename.setObjectName("output_filename")
@@ -474,8 +444,7 @@ class MainWindow(QMainWindow):
         self.btn_stop = QPushButton("Stop")
         self.btn_stop.setObjectName("btnStop")
         self.btn_stop.clicked.connect(self.stop_scraping)
-        # self.update_button_state()
-        # btn_stop.setEnabled(scraping_running)
+        
 
         
         # Add buttons to buttons_layout
@@ -512,18 +481,6 @@ class MainWindow(QMainWindow):
     
     def update_button_state(self):
         self.btn_stop.setEnabled(self.scraping_running)
-   
-    def load_excluded_domains(self):
-        url = "https://autofyn.com/exclude.txt"
-        excluded_domains = []
-        try:
-            response = requests.get(url)
-            response.raise_for_status()  # Ensure we notice bad responses
-            excluded_domains = [line.strip() for line in response.text.splitlines() if line.strip()]
-            # print(f"Loaded excluded domains: {excluded_domains}")
-        except requests.RequestException as e:
-            print(f"Error fetching excluded domains: {e}")
-        return excluded_domains
 
 
     def center(self):
@@ -537,8 +494,17 @@ class MainWindow(QMainWindow):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
         selected_folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options | QFileDialog.ShowDirsOnly)
+        os_name = platform.system()
         if selected_folder:
-            self.output_folder = selected_folder  # Store the selected folder path in the class attribute
+            if os_name == "Windows":
+                
+                if selected_folder.startswith('C:') and not (selected_folder.endswith('Desktop') or selected_folder.endswith('Documents') or selected_folder.endswith('Downloads')):
+                    QMessageBox.warning(self, "Warning", "File cannot be saved in C: drive, except in Desktop or Documents. Please select a valid folder.")
+                else:
+                    # Store the selected folder path in the class attribute
+                    self.output_folder = selected_folder
+            else:
+                self.output_folder = selected_folder
             # self.output_filename.setText(selected_folder)  # Optionally, show the selected folder path in the QLineEdit
     def add_domain(self):
         new_domain_text = self.new_domain.text().strip()
@@ -580,6 +546,8 @@ class MainWindow(QMainWindow):
             searchEngine.set_excluded_domains(self.excluded_domains)
 
     def start_scraping(self):
+        global shared_excluded_list
+        shared_excluded_list= self.excluded_domains[::-1]
         self.scraping_running = True
         # self.update_button_state()
         if not self.user_status():
@@ -787,19 +755,19 @@ class MainWindow(QMainWindow):
         appname=self.app_data.get('name')
         user_id=self.user_data.get('id')
         tkeywords=self.total_keywords
-        # print(appname,1, user_id, strtime, current_time,tkeywords)
+
         spent_time=self.calculate_time_spent(strtime,current_time)
         res=activity_data.send_activity_data(appname,4, user_id, spent_time, strtime, current_time,tkeywords)
-        # if not filename:
-        #     QMessageBox.warning(self, "Warning", "Please enter a valid filename.")
-        #     return
+   
         if not self.output_folder:
             self.output_folder='outputs'
             
             
         if any(res is None for res in result_list):
-            # QMessageBox.warning(self, "Warning", "Some scraping tasks did not return valid results.")
+
             return False
+        
+
         last_file = rearrange.rearrange_results(self.worker_thread.urls, result_list)
         if file_type == "CSV":
                 file_name = f"{self.output_folder}/{filename}.csv"
@@ -818,16 +786,13 @@ class MainWindow(QMainWindow):
             writer = csv.writer(file)
             writer.writerow(["Keyword","Title", "Link"])
             writer.writerows(result_list)
-            # writer.writerows(sorted_result_list)
-        # QMessageBox.information(self, "Download", "CSV file saved successfully.")
+       
     def write_to_excel(self, filename, result_list):
-        # for i in range(len(result_list)):
-        #     if result_list[i][2] == 'error429':
-        #         result_list[i][2] = ''
-        df = pd.DataFrame(result_list, columns=["Keyword","Title", "Link"])
-        # df_sorted = df.sort_values(by="Title", ascending=False)
+   
+        df = pd.DataFrame(result_list, columns=["Keyword","Title", "Link","Link1","Link2"])
+        
         df.to_excel(filename,index=False)
-        # QMessageBox.information(self, "Download", "Excel file saved successfully.")
+ 
     def refresh_app(self):
     # Clear excluded domains array
         self.excluded_domains.clear()
@@ -895,6 +860,9 @@ def initialize_directories_and_files():
     inputs_folder = "inputs"
     outputs_folder = "outputs"
 
+        
+        
+
     # Check and create inputs folder
     if not os.path.exists(inputs_folder):
         os.makedirs(inputs_folder)
@@ -941,24 +909,225 @@ def run_application():
     
     # window.showMaximized()
     sys.exit(app.exec_())
+
+
+
+import platform
+import subprocess
+import hashlib
+
+# Predefined list of allowed device IDs
+
+def get_device_id():
+    os_name = platform.system()
+    
+    if os_name == "Windows":
+        return get_windows_device_id()
+    elif os_name == "Darwin":
+        return get_mac_device_id()
+    elif os_name == "Linux":
+        return get_linux_device_id()
+    else:
+        raise Exception(f"Unsupported OS: {os_name}")
+
+def get_windows_device_id():
+    try:
+        # Get BIOS serial number
+        bios_serial = subprocess.check_output('wmic bios get serialnumber', shell=True).decode().split('\n')[1].strip()
+
+        # Get motherboard serial number
+        motherboard_serial = subprocess.check_output('wmic baseboard get serialnumber', shell=True).decode().split('\n')[1].strip()
+
+        # Get processor ID
+        processor_id = subprocess.check_output('wmic cpu get processorid', shell=True).decode().split('\n')[1].strip()
+
+        # Combine these to create a unique identifier
+        combined_id = bios_serial + motherboard_serial + processor_id
+
+        # Hash the combined ID to get a unique device ID
+        device_id = hashlib.sha256(combined_id.encode()).hexdigest()
+        return device_id
+    except Exception as e:
+        raise Exception(f"Failed to retrieve device ID on Windows: {e}")
+
+def get_mac_device_id():
+    try:
+        # Get system serial number
+        serial_number = subprocess.check_output("system_profiler SPHardwareDataType | awk '/Serial/ {print $4}'", shell=True).decode().strip()
+
+        # Get hardware UUID
+        hardware_uuid = subprocess.check_output("system_profiler SPHardwareDataType | awk '/UUID/ {print $3}'", shell=True).decode().strip()
+
+        # Combine these to create a unique identifier
+        combined_id = serial_number + hardware_uuid
+
+        # Hash the combined ID to get a unique device ID
+        device_id = hashlib.sha256(combined_id.encode()).hexdigest()
+        return device_id
+    except Exception as e:
+        raise Exception(f"Failed to retrieve device ID on macOS: {e}")
+
+def get_linux_device_id():
+    try:
+        # Get the machine-id (unique to each installation)
+        machine_id = subprocess.check_output("cat /etc/machine-id", shell=True).decode().strip()
+
+        # Get system UUID
+        system_uuid = subprocess.check_output("cat /sys/class/dmi/id/product_uuid", shell=True).decode().strip()
+
+        # Combine these to create a unique identifier
+        combined_id = machine_id + system_uuid
+
+        # Hash the combined ID to get a unique device ID
+        device_id = hashlib.sha256(combined_id.encode()).hexdigest()
+        return device_id
+    except Exception as e:
+        raise Exception(f"Failed to retrieve device ID on Linux: {e}")
+
+class RegisterWindow(QMainWindow):
+    def __init__(self, app_data):
+        super().__init__()
+        self.app_data = app_data
+        self.setWindowTitle("Register")
+        self.setFixedSize(400, 300)
+
+        # Center the window on the screen
+        screen_resolution = QDesktopWidget().availableGeometry()
+        self.setGeometry(
+            (screen_resolution.width() - 400) // 2,
+            (screen_resolution.height() - 300) // 2,
+            400,
+            300
+        )
+
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(20, 20, 20, 20)  # Adjust the margins around the layout
+        main_layout.setSpacing(2)  # Reduce the space between widgets in the layout
+
+        # Form layout for registration fields
+        form_layout = QFormLayout()
+        form_layout.setSpacing(2)  # Adjust the spacing between form elements
+
+        # Email input
+        self.email_input = QLineEdit()
+        self.email_input.setPlaceholderText("Enter your email")
+        form_layout.addRow(QLabel("Email:"), self.email_input)
+
+        # Add form layout to main layout
+        main_layout.addLayout(form_layout)
+
+        # Notification label (initially hidden)
+        self.notification = QLabel("")
+        self.notification.setAlignment(Qt.AlignCenter)
+        self.notification.setStyleSheet("color: red;")
+        self.notification.setFixedHeight(30)  # Reduce the height of the notification label
+        self.notification.hide()  # Hidden until a notification is shown
+        main_layout.addWidget(self.notification)
+
+        # Register and cancel buttons
+        register_button = QPushButton("Register")
+        register_button.clicked.connect(self.register_user)
+
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.close)
+
+        # Button layout
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)  # Adjust the space between buttons
+        button_layout.addWidget(register_button)
+        button_layout.addWidget(cancel_button)
+
+        # Add buttons to the main layout
+        main_layout.addLayout(button_layout)
+
+        # Set main widget and layout
+        container = QWidget()
+        container.setLayout(main_layout)
+        self.setCentralWidget(container)
+
+        # Apply custom styles (QSS)
+        self.setStyleSheet(generate_dynamic_qss(app_data))
+
+    def register_user(self):
+        email = self.email_input.text().strip()
+
+        if not email:
+            self.show_notification("Please enter an email address.")
+            return
+        global is_register
+        device_id = get_device_id()
+        # Construct the API URL
+        api_url = f"https://autofyn.com/Authentication_app/device_exist.php/{email}/{device_id}"
+        try:
+            response = requests.get(api_url)
+            if response.status_code == 200:
+                response_data = response.json()  # Get the JSON response
+                status = response_data.get("status", "Unknown status")
+                message = response_data.get("message", "No message provided")  # Assuming the API returns a message
+                is_register = (status == "success")
+                
+                # Show the status and message from the response
+                self.show_notification(f"Registration status: {status}\nMessage: {message}", success=is_register)
+            else:
+                self.show_notification("Failed to reach the server.")
+        except requests.RequestException as e:
+            self.show_notification(f"Error: {str(e)}")
+
+    def show_notification(self, message, success=False):
+        # Display a message to the user
+        self.notification.setText(message)
+        self.notification.setStyleSheet("color: green;" if success else "color: red;")
+        self.notification.show()
+
+
+
 if __name__ == "__main__":
     app = QApplication([])
-    mac=activity_data.get_mac_address()
-    CMS_app=activity_data.fetch_app_data(1,mac)
+
+    mac = activity_data.get_mac_address()
+    mac = get_device_id()
+    # print(mac)
+    CMS_app = activity_data.fetch_app_data(1, mac)
     user_data = CMS_app.get('user', {})
+
     if not user_data:
-        QMessageBox.warning(None, "Danger", "Please contact the admin. You are not eligible to use this app.")
+        app_data = {
+            'text_2': 'Footer Text',
+            'color_background': '#f0e6e7',
+            'color_text': '#000000',
+            'color_button_text_hover': '#7e221b',
+            'color_input_border': '#000000',
+            'color_button': '#000000',
+            'color_button_text': '#FFFFFF'
+        }
+        register = RegisterWindow(app_data)
+        register.show()
+        result = app.exec_()
+
+        if is_register:
+            latest_version_info = check_for_updates()
+            # print(latest_version_info)
+            if latest_version_info:
+                download_url = "https://autofyn.com/download_exe/index.php"
+                reply = QMessageBox.question(app.activeWindow(), "Update Available", "A new version is available. Do you want to update now?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+                
+                if reply == QMessageBox.Yes:
+                    webbrowser.open(download_url)
+            initialize_directories_and_files()
+            run_application()
+        # QMessageBox.warning(None, "Danger", "Please contact the admin. You are not eligible to use this app.")
     else:
         latest_version_info = check_for_updates()
         # print(latest_version_info)
         if latest_version_info:
-            download_url = "https://autofyn.com/download/AFGSearchInstaller.exe"
+            download_url = "https://autofyn.com/download_exe/index.php"
             reply = QMessageBox.question(app.activeWindow(), "Update Available", "A new version is available. Do you want to update now?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             
             if reply == QMessageBox.Yes:
                 webbrowser.open(download_url)
         initialize_directories_and_files()
-        run_application()
+        run_application()    
+    
 
 
 
@@ -966,6 +1135,7 @@ if __name__ == "__main__":
 
 
 
-# 04-EC-D8-4A-1D-24
 
-# print(load_excluded_domains())
+
+
+
