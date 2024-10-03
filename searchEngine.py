@@ -1,22 +1,78 @@
+import json
 import time 
-# from selenium import webdriver
 import csv
 import os
 import requests
 from bs4 import BeautifulSoup
 import concurrent.futures
-import random
-# from selenium.webdriver.chrome.service import Service
-# from selenium.webdriver.common.by import By
-# from webdriver_manager.chrome import ChromeDriverManager
+
+from RavaDynamics import load_excluded_domains
 import openpyxl
 import re
-excluded = []
+from urllib.parse import urlparse
+import requests
+
+from RavaDynamics import get_device_id
+from activity_data import fetch_app_data
+
+
+
+def get_domain_name(url):
+    parsed_url = urlparse(url if url.startswith('http') else f'http://{url}')
+    domain = parsed_url.netloc
+    # Remove 'www.' prefix if present
+    domain = domain.lstrip('www.')
+    return domain
+
+
+
+# Example usage
+def load_excluded_domains_two():
+    # URL to fetch data
+    url = "https://autofyn.com/excluded_domains/fetch_excluded_domains.php"
+    
+    try:
+        # Making a GET request to fetch the JSON data
+        response = requests.get(url)
+        response.raise_for_status()  # Check if the request was successful
+        
+        # Parsing the JSON response
+        data = response.json()
+        
+        # Extracting domain_name from the JSON data
+        domain_names = [item['domain_name'] for item in data]
+        
+        domain_names.append("en.wikipedia.org")
+        
+        return domain_names
+    
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data: {e}")
+        return []
+
+
+
+
+excluded = None
+
+# print(excluded)
 def excludeit(w):
-    for ex in excluded:    
-        if ex in w:
-            return False
-    return True       
+    global excluded
+    excluded = load_excluded_domains_two()
+    # print(f"link = {w}")
+    # print(f"excluded = {excluded}")
+    w = get_domain_name(w)
+    # print(f"after = {w}" )
+    
+    # print(f"w = {w}")
+    if w not in excluded:
+        
+        return False
+    
+    # print("False")
+    
+    return True
+   
 
 
 try:
@@ -27,209 +83,114 @@ except:pass
 def clean_keywords(keywords):
     keywords=str(keywords)
     # Replace non-alphabet characters with '+'
+    
     cleaned_keywords = re.sub(r'[^a-zA-Z0-9]', '+', keywords)
     
     # Remove consecutive '+' signs
     cleaned_keywords = re.sub(r'\++', '+', cleaned_keywords)
     
     return cleaned_keywords.strip('+')
-# ser = Service(ChromeDriverManager().install())
-# options = webdriver.ChromeOptions()
-# options.add_argument('--headless')
-# browser = webdriver.Chrome(service=ser, options=options)
-# browser.implicitly_wait(30)
+
 
 resultList = []
 failRequests=[]
 
 
 
-user_agents = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko',
-    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:89.0) Gecko/20100101 Firefox/89.0',
-    # Add more User-Agent strings here
-]
 
-
-# def google(ur):
-#     title=''
-#     link=''
-#     count=0
-#     try:    
-#         count=0
-#         title= '',
-#         link= '',
-#         # username = "rbowpoint"
-#         # password = "OZPn+O97MGkLa"
-#         # proxy = "pr.oxylabs.io:7777"
-#         # country = 'US'  # Change this to the desired country code
-#         username = "rbowpoint"
-#         password = "Alex_007007007"
-#         proxy = "pr.oxylabs.io:10000"
-#         country = 'us'  # Change this to the desired country code
-        
-#         # https://customer-rbowpoint:Alex_007007007@us-pr.oxylabs.io:10000
-        
-#         entry = f'https://customer-{username}:{password}@{country}-{proxy}'
-        
-#         # entry = f'http://customer-{username}-cc-{country}:{password}@{proxy}'
-        
-#         proxies = {
-#             'http': entry,
-#             'https': entry
-#         }
-
-#         headers = {
-#             'User-Agent': random.choice(user_agents),
-#             'Accept-Language': 'en-US,en;q=0.9',
-#             'Referer': 'https://www.google.com',
-#             'Connection': 'keep-alive'
-#         }
-
-#         # link = str(ur).replace(' ', '+').replace('&', '+').replace(',','+')
-#         URL_link = f"https://www.google.com/search?q={clean_keywords(ur)}"
-#         # https://ip.oxylabs.io/location
-#         while count<3:
-#             try:
-#                 # time.sleep(random.uniform(2,5))
-#                 response = requests.get(URL_link, proxies=proxies, headers=headers)
-#                 if response.status_code == 429:
-#                     print("Recieved errror 429, sleeping for a while")
-#                     time.sleep(random.uniform(30,60))   # changes  made
-#                     continue
-#                 # response = requests.get(URL_link, headers=headers)
-#             except Exception as e:
-#                 print(str(e))
-                
-                
-#                 # return
-#             # response=''
-#             if response.status_code == 200:
-#                 soup = BeautifulSoup(response.content, 'html.parser')
-#                 # print(soup.prettify())
-#                 results = soup.find_all('div', class_='MjjYud')
-                
-#                 if len(results) <=1:
-#                       results = soup.find_all('div', class_='yuRUbf')
-#                 for result in results:
-#                     try:
-#                         title_tag = result.find('h3')
-#                         if title_tag:
-#                             title = title_tag.get_text()
-#                             link = result.find('a')['href']
-#                             # print(f'Title: {title}')
-#                             # print(f'URL: {link}')
-#                             if excludeit(link):  # Assuming excludeit function is defined elsewhere
-#                                 item = {
-#                                     "keyword": ur,
-#                                     "title": title,
-#                                     "link": link,
-#                                 }
-#                                 # print(item)
-#                                 resultList.append([ur, title, link])
-#                                 return [ur, title, link]
-                                
-#                     except Exception as e:
-#                         print(f'Error parsing result: {e}')
-#                 count=5        
-                       
-                
-#             else:
-#                 count+=1
-#                 # failRequests.append(ur)
-#                 link=response.status_code
-#                 print(f'Failed to retrieve search results: {response.status_code}')
-#     except:pass  
-#     return [ur, 'title', 'error429']
+import json
+import requests
 
 
 def google(ur):
     title = ''
-    link = ''
-    count = 0
+    link1 = None
+    link2 = None
+    link3 = None
+    rating_count = None
+    phone = None
+    address = None
+
+
+    mac = get_device_id()
+    # print(mac)
+    CMS_app = fetch_app_data(1, mac)
+    
     try:
-        count = 0
-        title = ''
-        link = ''
-        username = "rbowpoint"
-        password = "Alex_007007007"
-        proxy = "pr.oxylabs.io:10000"
-        country = 'us'  # Change this to the desired country code
+        # Define the search query payload
+        payload = json.dumps({
+            "q": ur  # Search query term
+        })
         
-        entry = f'https://customer-{username}:{password}@{country}-{proxy}'
-        
-        proxies = {
-            'http': entry,
-            'https': entry
-        }
-
+        # print(CMS_app["data"]["API"])
+        # Define the headers with the API key
         headers = {
-            'User-Agent': random.choice(user_agents),
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.google.com',
-            'Connection': 'keep-alive'
+            'X-API-KEY': CMS_app["data"]["API"],
+            'Content-Type': 'application/json'
         }
-
-        # Test the proxy connection
-        test_url = "https://www.google.com"
-        try:
-            test_response = requests.get(test_url, proxies=proxies, headers=headers, timeout=10)
-            if test_response.status_code == 200:
-                print("Proxy is connected successfully.")
-            else:
-                print(f"Failed to connect via proxy, status code: {test_response.status_code}")
-                return [ur, 'title', 'proxy_error']
-        except Exception as e:
-            print(f"Error connecting to proxy: {e}")
-            return [ur, 'title', 'proxy_error']
-
-        URL_link = f"https://www.google.com/search?q={clean_keywords(ur)}"
         
-        while count < 3:
-            try:
-                response = requests.get(URL_link, proxies=proxies, headers=headers)
-                if response.status_code == 429:
-                    print("Received error 429, sleeping for a while")
-                    time.sleep(random.uniform(30, 60))
-                    continue
-            except Exception as e:
-                print(f"Error during request: {e}")
-                continue
-
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, 'html.parser')
-                results = soup.find_all('div', class_='MjjYud')
+        # Make the POST request to the serper.dev API
+        response = requests.post("https://google.serper.dev/search", headers=headers, data=payload)
+        
+        # Check if the response is successful
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Check if knowledgeGraph exists
+            knowledge_graph = data.get("knowledgeGraph", {})
+            if knowledge_graph:
+                title = knowledge_graph.get('title', '')
+                link1 = knowledge_graph.get('website', None)
                 
-                if len(results) <= 1:
-                    results = soup.find_all('div', class_='yuRUbf')
+                # Extract additional fields if they exist
+                rating_count = knowledge_graph.get('ratingCount', None)
+                address = knowledge_graph.get('attributes', {}).get('Address', None)
                 
-                for result in results:
-                    try:
-                        title_tag = result.find('h3')
-                        if title_tag:
-                            title = title_tag.get_text()
-                            link = result.find('a')['href']
-                            if excludeit(link):  # Assuming excludeit function is defined elsewhere
-                                item = {
-                                    "keyword": ur,
-                                    "title": title,
-                                    "link": link,
-                                }
-                                resultList.append([ur, title, link])
-                                return [ur, title, link]
-                                
-                    except Exception as e:
-                        print(f'Error parsing result: {e}')
-                count = 5        
+                # Fetch and split the phone numbers, keeping only the first one
+                phone_list = knowledge_graph.get('attributes', {}).get('Phone', None)
+                if phone_list:
+                    phone = phone_list.split('⋅')[0].strip()  # Take the first phone number
                 
-            else:
-                count += 1
-                link = response.status_code
-                print(f'Failed to retrieve search results: {response.status_code}')
+                # Call excludeit function to exclude the link, not the title
+                if link1 and not excludeit(link1):
+                    # Return the formatted list including the additional fields
+                    return [ur, title, link1, link2, link3, address, rating_count, phone]
+            
+            # Extract results from the organic section if no knowledgeGraph is present
+            results = data.get("organic", [])
+            
+            # Get the top three non-wikipedia links
+            count = 0
+            for result in results:
+                link = result.get('link', None)
+                
+                # Call excludeit function on the link
+                if link and not excludeit(link):
+                    if count == 0:
+                        title = result.get('title', None)
+                        link1 = link
+                    elif count == 1:
+                        link2 = link
+                    elif count == 2:
+                        link3 = link
+                    
+                    count += 1
+                
+                # Stop after collecting 3 valid links
+                if count >= 3:
+                    break
+            
+            # Return the formatted list with up to three valid links
+            return [ur, title, link1, link2, link3, address, rating_count, phone]
+        else:
+            print(f"Failed to retrieve search results: {response.status_code}")
+            
     except Exception as e:
-        print(f"General error: {e}")
-    return [ur, 'title', 'error429']
+        print(f"An error occurred: {e}")
+    
+    # In case of failure or no valid links found
+    return [ur, title, link1, link2, link3, address, rating_count, phone]
+
 
 
 def main(urls):  
@@ -276,46 +237,12 @@ def write_to_csv(data, file_path):
         pass        
 
 
-# def Google(ur):
-    # try:
-    #     title=''
-    #     anchor=''
-    #     link=str(ur).replace(' ','+').replace('&','+')
-    #     URL_link = f"https://www.google.com/search?q={link}"
-    #     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'}
-    #     browser.get(URL_link)
-    #     time.sleep(1)
-    #     results = browser.find_elements(By.XPATH, '//div[@class="MjjYud"]')
-    #     for result in results:
-    #         try:
-    #             title=''
-    #             anchor=''
-    #             title = result.find_element(By.XPATH, './/h3').text
-    #             anchor = result.find_element(By.XPATH, './/a').get_attribute('href')
-    #             if excludeit(anchor):
-    #                 item = {
-    #                     "keyword": ur,
-    #                     "title": title,
-    #                     "link": anchor,
-    #                 }
-    #                 print(item)
-    #                 resultList.append([ur, title, anchor])
-    #                 break 
-    #         except Exception as e:
-    #             print(e)  
-    # except Exception as e:
-    #     print(e)
-    #     pass
+
            
-def get_result_list():
-    return resultList
+# def get_result_list():
+#     return resultList
 def set_excluded_domains(domains):
-    global excluded
+    excluded = load_excluded_domains()
     for dm in domains:
         if not dm in excluded:
            excluded.append(dm)
-# def download(file_name, file_type):
-#     if file_type.lower() == 'csv':
-#         write_to_csv(resultList, f"{file_name}.csv")
-#     elif file_type.lower() == 'xlsx':
-#         write_to_excel(resultList, f"{file_name}.xlsx")
